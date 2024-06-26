@@ -30,6 +30,11 @@
             this.Catalog.Remove(product);
         }
 
+        public void ResetBasket()
+        {
+            this.Catalog.Clear();
+        }
+
         public void SaveBasket()
         {
             if (!this.Catalog.Any())
