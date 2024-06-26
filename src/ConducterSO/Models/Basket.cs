@@ -35,15 +35,17 @@
             this.Catalog.Clear();
         }
 
-        public void SaveBasket()
+        public decimal SaveBasket()
         {
             if (!this.Catalog.Any())
-                return;
+                return 0;
 
             foreach (var product in this.Catalog)
             {
                 product.ApplyDiscountsToProduct();
             }
+
+            return GetBasketTotalPrice();   
         }
 
         public decimal GetBasketTotalPrice()
