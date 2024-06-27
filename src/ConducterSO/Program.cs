@@ -7,48 +7,17 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System;
+using Microsoft.Extensions.Hosting;
 
-// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
+HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-var configurationBuilder = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory)
-    .AddJsonFile("config.json", optional: false, reloadOnChange: true);
+builder.Environment.ContentRootPath = Directory.GetCurrentDirectory();
+builder.Configuration.AddJsonFile("config.json", optional: false);
+builder.Configuration.AddCommandLine(args);
 
-IConfiguration configuration = configurationBuilder.Build();
+builder.AddKernel();
 
-var openApiModel = configuration["OpenApi:model"];
-var openApiKey = configuration["OpenApi:key"];
-
-IKernelBuilder kernelBuilder = Kernel.CreateBuilder();
-kernelBuilder.AddOpenAIChatCompletion(openApiModel, openApiKey);
-
-var myShop = new ShopPlugin("My Shop");
-
-kernelBuilder.Plugins.AddFromType<LightsPlugin>("Lights");
-kernelBuilder.Plugins.AddFromType<TestDrivenDevelopmentPlugin>("TDD");
-kernelBuilder.Plugins.AddFromObject(myShop);
-
-var kernel = kernelBuilder.Build(); 
-
-var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-
-// Enable planning
-//OpenAIPromptExecutionSettings openAIPromptExecutionSettings = new()
-//{
-//    ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
-//};
-
-/**
- * Enable automatic function calling
- * Function calling is a way the AI can invoke functions with the corrects parameters.
- */
-OpenAIPromptExecutionSettings openAIPromptExecutionSettings = new()
-{
-    ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
-};
-
-// Create a history store the conversation
-var history = new ChatHistory();
+var serviceProvider = builder.Services.BuildServiceProvider();
 
 var product1 = new Product("Laptop", 999.99m);
 var discountList1 = new List<Discount>
@@ -97,31 +66,73 @@ basket3.AddProductToBasket(product1);
 totalBasketPrice = basket3.SaveBasket();
 Console.WriteLine($"{basket3.Name} total price is {totalBasketPrice.ToString()}");
 
-myShop.AddBasketsToShop([basket1, basket2, basket3]);
+//myShop.AddBasketsToShop([basket1, basket2, basket3]);
 
-myShop.AddProductToShop(product1);
-myShop.AddProductToShop(product2);
-myShop.AddProductToShop(product3);
-myShop.AddProductToShop(product4);
+//myShop.AddProductToShop(product1);
+//myShop.AddProductToShop(product2);
+//myShop.AddProductToShop(product3);
+//myShop.AddProductToShop(product4);
 
-string? userInput;
-do
+await StartChatAsync();
+
+IHost host = builder.Build();
+
+/// <summary>
+/// Starts a new chat session
+/// </summary>
+async Task StartChatAsync()
 {
-    // Collect user input
-    Console.Write("User > ");
-    userInput = Console.ReadLine();
+    /**
+* Enable automatic function calling
+* Function calling is a way the AI can invoke functions with the corrects parameters.
+*/
+    OpenAIPromptExecutionSettings openAIPromptExecutionSettings = new()
+    {
+        ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
+    };
 
-    // Add user input
-    history.AddUserMessage(userInput);
 
-    var result = await chatCompletionService.GetChatMessageContentAsync(
-        history,
-        executionSettings: openAIPromptExecutionSettings,
-        kernel: kernel);
+    Console.WriteLine("Chat content:");
+    Console.WriteLine("------------------------");
 
-    // Print the results
-    Console.WriteLine("Assistant > " + result);
+    // Create a history store the conversation
+    var history = new ChatHistory();
 
-    // Add the message from the agent to the chat history
-    history.AddMessage(result.Role, result.Content ?? string.Empty);
-} while (userInput is not null);
+    string? userInput;
+    var chatCompletitionService = serviceProvider.GetRequiredService<IChatCompletionService>();
+    var kernelService = serviceProvider.GetRequiredService<Kernel>();
+    do
+    {
+        // Collect user input
+        Console.Write("User > ");
+        userInput = Console.ReadLine();
+
+        // Add user input
+        history.AddUserMessage(userInput);
+
+        var result = await chatCompletitionService.GetChatMessageContentAsync(
+            history,
+            executionSettings: openAIPromptExecutionSettings,
+            kernel: kernelService);
+
+        // Add the message from the agent to the chat history
+        history.AddMessage(result.Role, result.Content ?? string.Empty);
+        
+        await MessageOutputAsync(history);
+    } while (userInput is not null);
+}
+/// <summary>
+/// Outputs the last message of the chat history
+/// </summary>
+Task MessageOutputAsync(ChatHistory chatHistory)
+{
+    var message = chatHistory.Last();
+
+    Console.WriteLine($"{message.Role} > {message.Content}");
+    Console.WriteLine("------------------------");
+
+    return Task.CompletedTask;
+}
+
+host.Run();
+
