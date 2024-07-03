@@ -1,8 +1,8 @@
 ﻿using ConducterSO.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
 
 namespace ConducterSO
 {
@@ -11,25 +11,35 @@ namespace ConducterSO
         // https://github.com/microsoft/semantic-kernel/blob/main/dotnet/samples/Concepts/DependencyInjection/Kernel_Building.cs
         public static void RegisterApplicationSemanticKernel(this HostApplicationBuilder builder)
         {
-            var openApiModel = builder.Configuration["OpenApi:model"];
-            var openApiKey = builder.Configuration["OpenApi:key"];
+            RegisterKernelPluginsCollection(builder);
+            RegisterChatCompletion(builder);
 
-            builder.Services.AddTransient(srv =>
+            builder.Services.AddTransient<Kernel>((srvProvider) =>
             {
-                var builder = Kernel.CreateBuilder();
-                builder.RegisterKernelPlugins();
-                builder.Services.AddOpenAIChatCompletion(modelId: openApiModel, apiKey: openApiKey);
-                return builder.Build();
+                KernelPluginCollection pluginCollection = srvProvider.GetRequiredService<KernelPluginCollection>();
+                return new Kernel(srvProvider, pluginCollection);
             });
 
             _ = builder.Services.BuildServiceProvider().GetRequiredService<Kernel>();
-            _ = builder.Services.BuildServiceProvider().GetRequiredService<ShopPlugin>();
+            _ = builder.Services.BuildServiceProvider().GetRequiredService<IChatCompletionService>();
         }
 
-        private static void RegisterKernelPlugins(this IKernelBuilder builder)
+        private static void RegisterKernelPluginsCollection(this HostApplicationBuilder builder)
         {
-            builder.Plugins.AddFromType<LightsPlugin>("Lights");
-            builder.Plugins.AddFromType<ShopPlugin>("Shop");
+            builder.Services.AddTransient<KernelPluginCollection>((srvProvider) =>
+            {
+                KernelPluginCollection plugins = [];
+                plugins.AddFromType<LightsPlugin>();
+                plugins.AddFromType<ShopPlugin>();
+                return plugins;
+            }); 
+        }
+
+        private static void RegisterChatCompletion(this HostApplicationBuilder builder)
+        {
+            var openApiModel = builder.Configuration["OpenApi:model"];
+            var openApiKey = builder.Configuration["OpenApi:key"];
+            builder.Services.AddOpenAIChatCompletion(modelId: openApiModel, apiKey: openApiKey);
         }
 
     }
